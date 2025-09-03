@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Ops Monitor — Control Room</title>
+  <style>
+    :root{
+      --bg:#0b0f1a; --panel:#101727; --panel2:#0e1424; --accent:#6d8bff; --accent2:#21d4fd;
+      --ok:#22c55e; --warn:#f59e0b; --text:#e8eeff; --muted:#96a0bd; --grid:#1b2440;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background: radial-gradient(1200px 600px at -10% -10%, #101d3f 0%, transparent 50%),
+                     radial-gradient(1000px 600px at 110% -10%, #101d3f 0%, transparent 55%), #0b0f1a;
+         color:var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Noto Sans", Arial;}
+    a{color:inherit}
+    .login-wrap{min-height:100vh; display:grid; place-items:center; padding:22px}
+    .card{
+      width:min(420px, 92vw); background:linear-gradient(180deg,#151e38,#0e1424);
+      border:1px solid rgba(150,160,189,.18); border-radius:16px; padding:22px;
+      box-shadow:0 30px 80px rgba(0,0,0,.35);
+    }
+    h1{font-size:1.2rem; letter-spacing:.3px;}
+    .muted{color:var(--muted)}
+    .row{display:flex; gap:12px}
+    .field{margin-top:12px}
+    label{display:block; font-size:.9rem; color:var(--muted); margin-bottom:6px}
+    input{
+      width:100%; padding:12px; border-radius:12px; border:1px solid rgba(150,160,189,.25);
+      background:#0c1326; color:var(--text);
+    }
+    button.primary{
+      width:100%; margin-top:14px; padding:12px; border-radius:12px; border:1px solid rgba(150,160,189,.25);
+      background:linear-gradient(90deg, var(--accent), var(--accent2)); color:white; font-weight:700; cursor:pointer;
+    }
+    .error{display:none; margin-top:10px; background:#b91c1c; color:#fff; padding:8px 10px; border-radius:10px; font-size:.9rem}
+
+    /* App layout */
+    #app{display:none; min-height:100vh}
+    .shell{display:grid; grid-template-columns: 270px 1fr; min-height:100vh}
+    aside{
+      padding:20px; border-right:1px solid rgba(150,160,189,.15); background:linear-gradient(180deg,#0f1730,#0b1020);
+      position:sticky; top:0; height:100vh;
+    }
+    .brand{display:flex; align-items:center; gap:10px; margin-bottom:14px}
+    .logo{width:34px;height:34px;border-radius:10px;background:conic-gradient(from 180deg,var(--accent),var(--accent2));box-shadow:0 0 18px rgba(33,212,253,.35)}
+    .pill{display:inline-flex; align-items:center; gap:8px; padding:7px 10px; border-radius:999px; border:1px solid rgba(33,212,253,.35); color:#9ae6ff; background:rgba(33,212,253,.1); font-size:.85rem}
+    .svc{margin-top:14px; border-top:1px dashed rgba(150,160,189,.18); padding-top:14px}
+    .svc .item{display:flex; align-items:center; justify-content:space-between; margin:8px 0; color:var(--muted)}
+    .dot{width:10px; height:10px; border-radius:999px; background:var(--ok); box-shadow:0 0 12px rgba(34,197,94,.6)}
+    header{
+      display:flex; align-items:center; justify-content:space-between; padding:18px 22px;
+      border-bottom:1px solid rgba(150,160,189,.15); background:rgba(11,15,26,.55); backdrop-filter: blur(6px);
+      position:sticky; top:0; z-index:15;
+    }
+    .avatar{width:38px;height:38px;border-radius:12px; background:linear-gradient(135deg,var(--accent),var(--accent2)); display:grid; place-items:center; font-weight:800}
+    .logout{background:#e23a49;color:white;border:none;border-radius:10px;padding:8px 12px;cursor:pointer}
+    main{padding:22px}
+    .grid{display:grid; grid-template-columns: 2fr 1fr; gap:20px}
+    .panel{background:linear-gradient(180deg, #111a33, #0c1326); border:1px solid rgba(150,160,189,.18); border-radius:14px; padding:16px}
+    .title{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px}
+    .kpi{display:grid; grid-template-columns: repeat(4, minmax(160px, 1fr)); gap:12px}
+    .tile{background:linear-gradient(180deg,#121a34,#0d152b); border:1px solid rgba(150,160,189,.15); border-radius:12px; padding:14px}
+    .tile .k{color:var(--muted); font-size:.9rem; margin-bottom:6px}
+    .tile .v{font-size:1.8rem; font-weight:800; background:linear-gradient(90deg,var(--accent),var(--accent2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent}
+
+    .gauges{display:grid; grid-template-columns: repeat(3, minmax(180px, 1fr)); gap:14px; margin-top:14px}
+    canvas{width:100%; height:160px; background:#0b1020; border-radius:12px}
+    .projects .row{display:flex; justify-content:space-between; color:var(--muted); margin:8px 0}
+    .bar{height:8px; background:#1c2545; border-radius:8px; overflow:hidden}
+    .fill{height:100%; background:linear-gradient(90deg,var(--accent),var(--accent2))}
+    @media (max-width: 1100px){ .grid{grid-template-columns: 1fr} .kpi{grid-template-columns: repeat(2,1fr)} .gauges{grid-template-columns: repeat(2,1fr)} }
+    @media (max-width: 640px){ .kpi{grid-template-columns: 1fr} .gauges{grid-template-columns: 1fr} .shell{grid-template-columns:1fr} aside{position:relative;height:auto} }
+  </style>
+</head>
+<body>
+
+  <!-- LOGIN -->
+  <section id="login" class="login-wrap">
+    <div class="card">
+      <div class="brand"><div class="logo"></div><h1>Ops Monitor</h1></div>
+      <div class="muted">Sign in to your control room</div>
+      <form onsubmit="login(event)">
+        <div class="field"><label>Username</label><input id="u" value="admin" autocomplete="username"></div>
+        <div class="field"><label>Password</label><input id="p" type="password" value="admin123" autocomplete="current-password"></div>
+        <button class="primary">Login</button>
+        <div id="err" class="error"></div>
+      </form>
+      <div class="muted" style="margin-top:8px; font-size:.9rem;">Demo: admin / admin123</div>
+    </div>
+  </section>
+
+  <!-- APP -->
+  <div id="app">
+    <div class="shell">
+      <aside>
+        <div class="brand"><div class="logo"></div><h1>Ops Monitor</h1></div>
+        <div class="pill"><span class="dot"></span> All services healthy</div>
+        <div class="svc">
+          <div class="item"><span>Nginx</span><span class="dot"></span></div>
+          <div class="item"><span>WebApp</span><span class="dot"></span></div>
+          <div class="item"><span>MySQL</span><span class="dot"></span></div>
+          <div class="item"><span>Redis</span><span class="dot"></span></div>
+        </div>
+      </aside>
+
+      <div>
+        <header>
+          <div>
+            <div style="font-size:1.35rem;font-weight:800">Control Room</div>
+            <div class="muted">Live system overview</div>
+          </div>
+          <div class="row">
+            <div class="avatar" id="avatar">A</div>
+            <button class="logout" onclick="logout()">Logout</button>
+          </div>
+        </header>
+
+        <main>
+          <div class="grid">
+            <!-- Left: KPIs + Gauges + Connections Chart -->
+            <div class="panel">
+              <div class="title"><div style="font-weight:800">Overview</div><div class="muted" id="ts"></div></div>
+              <div class="kpi">
+                <div class="tile"><div class="k">Total Projects</div><div class="v" id="kProj">0</div></div>
+                <div class="tile"><div class="k">Total Tasks</div><div class="v" id="kTasks">0</div></div>
+                <div class="tile"><div class="k">Completed</div><div class="v" id="kDone">0</div></div>
+                <div class="tile"><div class="k">Users</div><div class="v" id="kUsers">0</div></div>
+              </div>
+
+              <div class="gauges">
+                <canvas id="gUptime"></canvas>
+                <canvas id="gConn"></canvas>
+                <canvas id="gProgress"></canvas>
+              </div>
+
+              <div class="panel" style="margin-top:14px">
+                <div class="title"><div style="font-weight:800">Active Connections (last 60s)</div></div>
+                <canvas id="connChart" style="height:220px"></canvas>
+              </div>
+            </div>
+
+            <!-- Right: Projects -->
+            <div class="panel projects">
+              <div class="title"><div style="font-weight:800">Projects</div><div class="muted" id="pCount">0</div></div>
+              <div id="pList"></div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // ====== LOGIN ======
+  let user=null, token=null, connSeries=new Array(60).fill(0);
+  async function login(e){
+    e.preventDefault();
+    const username=document.getElementById('u').value.trim();
+    const password=document.getElementById('p').value;
+    const err=document.getElementById('err'); err.style.display='none';
+    try{
+      const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
+      const d=await r.json();
+      if(!d.success){ err.textContent=d.message||'Login failed'; err.style.display='block'; return; }
+      user=d.user; token=d.token;
+      document.getElementById('login').style.display='none';
+      document.getElementById('app').style.display='block';
+      document.getElementById('avatar').textContent=user.username[0].toUpperCase();
+      refreshAll();
+      setInterval(refreshAll, 10000); // auto refresh every 10s
+      setInterval(tickConnChart, 1000); // animate line chart
+    }catch(ex){ err.textContent='Login failed. Please try again.'; err.style.display='block'; }
+  }
+  function logout(){ user=null; token=null; document.getElementById('app').style.display='none'; document.getElementById('login').style.display='grid'; }
+
+  // ====== DATA LOADERS ======
+  async function refreshAll(){
+    try{
+      const r=await fetch('/api/dashboard'); const d=await r.json();
+      document.getElementById('kProj').textContent=d.totalProjects;
+      document.getElementById('kTasks').textContent=d.totalTasks;
+      document.getElementById('kDone').textContent=d.completedTasks;
+      document.getElementById('kUsers').textContent=d.totalUsers;
+      document.getElementById('ts').textContent=new Date().toLocaleString();
+
+      // Gauges
+      drawGauge('gUptime', d.systemUptime ? parseFloat(d.systemUptime) : 0, 0, 100, 'Uptime %');
+      drawGauge('gConn', d.activeConnections||0, 0, 100, 'Active Conn');
+      const progress = d.totalTasks>0 ? Math.round((d.completedTasks/d.totalTasks)*100) : 0;
+      drawGauge('gProgress', progress, 0, 100, 'Task Progress');
+
+      // Feed connection value into chart buffer
+      pushConn(d.activeConnections||0);
+
+      // Projects
+      const p=await (await fetch('/api/projects')).json();
+      document.getElementById('pCount').textContent = `${p.length} total`;
+      renderProjects(p);
+    }catch(e){ console.error(e); }
+  }
+
+  function renderProjects(p){
+    const host=document.getElementById('pList');
+    host.innerHTML = p.map(x=>{
+      const done=x.completed_tasks||0, total=x.task_count||0, pr=total?Math.round(done/total*100):0;
+      return `<div class="tile" style="margin:10px 0">
+        <div class="row" style="justify-content:space-between">
+          <div style="font-weight:700">${x.name}</div>
+          <div class="muted">${x.status.replace('_',' ')}</div>
+        </div>
+        <div class="row" style="justify-content:space-between"><div class="muted">${x.description||''}</div><div class="muted">By: ${x.created_by_name||'—'}</div></div>
+        <div class="bar" style="margin-top:8px"><div class="fill" style="width:${pr}%"></div></div>
+        <div class="muted" style="margin-top:6px">Tasks: ${done}/${total}</div>
+      </div>`;
+    }).join('');
+  }
+
+  // ====== GAUGES (Canvas, lightweight) ======
+  function drawGauge(id, value, min, max, label){
+    const el=document.getElementById(id); const ctx=el.getContext('2d');
+    const w=el.width=el.clientWidth, h=el.height=el.clientHeight, cx=w/2, cy=h*0.8, r=Math.min(w,h)*0.42;
+    const from=Math.PI, to=2*Math.PI; // semicircle
+    ctx.clearRect(0,0,w,h);
+    // background arc
+    ctx.lineWidth=16; ctx.strokeStyle='#1c2545'; arc(ctx, cx, cy, r, from, to);
+    // value arc
+    const pct = Math.max(0, Math.min(1, (value-min)/(max-min)));
+    const grad = ctx.createLinearGradient(0,0,w,0); grad.addColorStop(0,'#6d8bff'); grad.addColorStop(1,'#21d4fd');
+    ctx.strokeStyle=grad; arc(ctx, cx, cy, r, from, from + (to-from)*pct);
+    // ticks
+    ctx.lineWidth=2; ctx.strokeStyle='rgba(150,160,189,.35)';
+    for(let i=0;i<=10;i++){ const a=from + (to-from)*(i/10); tick(ctx,cx,cy,r,a,8); }
+    // text
+    ctx.fillStyle='#e8eeff'; ctx.font='700 22px system-ui'; ctx.textAlign='center';
+    ctx.fillText(isNaN(value)?'—':String(value), cx, cy-8);
+    ctx.font='12px system-ui'; ctx.fillStyle='#96a0bd'; ctx.fillText(label, cx, cy+18);
+  }
+  function arc(ctx,cx,cy,r,a1,a2){ ctx.beginPath(); ctx.arc(cx,cy,r,a1,a2); ctx.stroke(); }
+  function tick(ctx,cx,cy,r,a,len){ const x1=cx+Math.cos(a)*(r+2), y1=cy+Math.sin(a)*(r+2); const x2=cx+Math.cos(a)*(r+2+len), y2=cy+Math.sin(a)*(r+2+len); ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); }
+
+  // ====== Simple line chart (connections) ======
+  function pushConn(v){ connSeries.push(v); if(connSeries.length>60) connSeries.shift(); }
+  function tickConnChart(){
+    const el=document.getElementById('connChart'); const ctx=el.getContext('2d');
+    const w=el.width=el.clientWidth, h=el.height=el.clientHeight;
+    ctx.clearRect(0,0,w,h);
+    // grid
+    ctx.strokeStyle='#1c2545'; ctx.lineWidth=1;
+    for(let i=0;i<6;i++){ const y=(h/6)*i; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+    // line
+    const max=Math.max(10, ...connSeries); ctx.strokeStyle='#6d8bff'; ctx.lineWidth=2; ctx.beginPath();
+    connSeries.forEach((v,i)=>{ const x=(w/59)*i; const y= h - (v/max)*h*0.9 - h*0.05; i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+    ctx.stroke();
+  }
+</script>
+</body>
+</html>
+
+

@@ -1,0 +1,11 @@
+.env
+.env.*
+!*.example
+
+webapp/node_modules
+webapp/npm-debug.log
+
+**/.DS_Store
+**/.idea
+**/.vscode
+
